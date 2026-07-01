@@ -105,8 +105,14 @@ export async function GET(
       }
     }
 
-    // Fallback: iframe embeds
-    const result = buildSourceResponse(malId, episode, serverKey, subOrDub);
+    // Fallback: player-only iframe embeds. If no explicit iframe server was
+    // chosen (empty or the server-side aniwatch key), default to a player-only
+    // provider so we never embed a full third-party site page.
+    const fallbackKey =
+      !serverKey || serverKey.startsWith("aniwatch")
+        ? "vidnest-" + subOrDub
+        : serverKey;
+    const result = buildSourceResponse(malId, episode, fallbackKey, subOrDub);
     return NextResponse.json(
       { ...result, type: "iframe" },
       { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } }
