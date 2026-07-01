@@ -108,8 +108,12 @@ export async function GET(
     // Fallback: player-only iframe embeds. If no explicit iframe server was
     // chosen (empty or the server-side aniwatch key), default to a player-only
     // provider so we never embed a full third-party site page.
+    // aniwatch and senshi have no player-only iframe (senshi's /watch URL is its
+    // full website), so their fallback must route to a player-only provider.
     const fallbackKey =
-      !serverKey || serverKey.startsWith("aniwatch")
+      !serverKey ||
+      serverKey.startsWith("aniwatch") ||
+      serverKey.startsWith("senshi")
         ? "vidnest-" + subOrDub
         : serverKey;
     const result = buildSourceResponse(malId, episode, fallbackKey, subOrDub);

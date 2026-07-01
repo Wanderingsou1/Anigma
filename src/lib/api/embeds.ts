@@ -17,18 +17,11 @@ export const EMBED_SERVERS: EmbedServer[] = [
       `https://vidnest.fun/anime/${malId}/${episode}/sub`,
   },
   {
-    key: "vidlink-sub",
-    label: "Vidlink",
-    subOrDub: "sub",
-    getUrl: (malId, episode) =>
-      `https://vidlink.pro/anime/${malId}/${episode}/sub`,
-  },
-  {
     key: "videasy-sub",
     label: "Videasy",
     subOrDub: "sub",
     getUrl: (malId, episode) =>
-      `https://player.videasy.net/anime/${malId}/${episode}`,
+      `https://player.videasy.to/anime/${malId}/${episode}`,
   },
   {
     // Senshi is played as an HLS stream in sources/route.ts; this URL is only a
@@ -55,18 +48,11 @@ export const EMBED_SERVERS: EmbedServer[] = [
       `https://vidnest.fun/anime/${malId}/${episode}/dub`,
   },
   {
-    key: "vidlink-dub",
-    label: "Vidlink (Dub)",
-    subOrDub: "dub",
-    getUrl: (malId, episode) =>
-      `https://vidlink.pro/anime/${malId}/${episode}/dub`,
-  },
-  {
     key: "videasy-dub",
     label: "Videasy (Dub)",
     subOrDub: "dub",
     getUrl: (malId, episode) =>
-      `https://player.videasy.net/anime/${malId}/${episode}?dub=true`,
+      `https://player.videasy.to/anime/${malId}/${episode}?dub=true`,
   },
   {
     key: "senshi-dub",

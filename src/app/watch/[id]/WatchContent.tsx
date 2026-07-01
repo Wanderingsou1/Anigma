@@ -79,13 +79,40 @@ export default function WatchContent({ id }: { id: string }) {
 
     const video = videoRef.current;
 
-    function attachHls(HlsClass: { isSupported: () => boolean; new(): { loadSource(u: string): void; attachMedia(v: HTMLVideoElement): void; destroy(): void } }) {
+    type HlsInstance = {
+      loadSource(u: string): void;
+      attachMedia(v: HTMLVideoElement): void;
+      destroy(): void;
+      startLoad(): void;
+      recoverMediaError(): void;
+      on(event: string, cb: (e: string, data: { type: string; fatal: boolean; details: string }) => void): void;
+    };
+    type HlsCtor = {
+      isSupported: () => boolean;
+      Events: { ERROR: string };
+      ErrorTypes: { NETWORK_ERROR: string; MEDIA_ERROR: string };
+      new(): HlsInstance;
+    };
+
+    function attachHls(HlsClass: HlsCtor) {
       if (HlsClass.isSupported()) {
-        if (hlsRef.current) (hlsRef.current as { destroy(): void }).destroy();
+        if (hlsRef.current) (hlsRef.current as HlsInstance).destroy();
         const hls = new HlsClass();
         hlsRef.current = hls;
         hls.loadSource(src!.embedUrl);
         hls.attachMedia(video);
+
+        // Recover from fatal stalls/errors (e.g. after seeking) instead of dying.
+        hls.on(HlsClass.Events.ERROR, (_evt, data) => {
+          if (!data.fatal) return;
+          if (data.type === HlsClass.ErrorTypes.NETWORK_ERROR) {
+            hls.startLoad(); // retry loading segments
+          } else if (data.type === HlsClass.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError(); // re-init the media pipeline
+          } else {
+            hls.destroy();
+          }
+        });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = src!.embedUrl;
       }
