@@ -3,10 +3,10 @@ import { getAniListIdByMalId } from "./anilist";
 
 export const EMBED_SERVERS: EmbedServer[] = [
   // ── SUB servers ────────────────────────────────────────────────────────────
-  // VidNest is listed first: it is a player-only iframe that loads from the
-  // viewer's browser (residential IP), so it's the only server that reliably
-  // works on Vercel. HiAnime and Senshi are server-side scrapers whose upstreams
-  // block Vercel's datacenter IPs — they work locally but fall through in prod.
+  // The player-only iframes (VidNest, VidLink, VidPlus) load from the viewer's
+  // browser (residential IP), so they work reliably on Vercel. HiAnime and
+  // Senshi are server-side scrapers whose upstreams block Vercel's datacenter
+  // IPs — they work locally but fall through in prod. VidNest is the default.
   {
     key: "vidnest-sub",
     label: "VidNest",
@@ -14,6 +14,22 @@ export const EMBED_SERVERS: EmbedServer[] = [
     // VidNest keys its catalog by AniList ID.
     getUrl: ({ anilistId }, episode) =>
       `https://vidnest.fun/anime/${anilistId}/${episode}/sub`,
+  },
+  {
+    key: "vidlink-sub",
+    label: "VidLink",
+    subOrDub: "sub",
+    // VidLink keys its catalog by MAL ID: /anime/{malId}/{episode}/{sub|dub}.
+    getUrl: ({ malId }, episode) =>
+      `https://vidlink.pro/anime/${malId}/${episode}/sub`,
+  },
+  {
+    key: "vidplus-sub",
+    label: "VidPlus",
+    subOrDub: "sub",
+    // VidPlus keys its catalog by AniList ID with a ?dub flag.
+    getUrl: ({ anilistId }, episode) =>
+      `https://player.vidplus.to/embed/anime/${anilistId}/${episode}?dub=false`,
   },
   {
     key: "aniwatch-sub",
@@ -38,6 +54,20 @@ export const EMBED_SERVERS: EmbedServer[] = [
     subOrDub: "dub",
     getUrl: ({ anilistId }, episode) =>
       `https://vidnest.fun/anime/${anilistId}/${episode}/dub`,
+  },
+  {
+    key: "vidlink-dub",
+    label: "VidLink (Dub)",
+    subOrDub: "dub",
+    getUrl: ({ malId }, episode) =>
+      `https://vidlink.pro/anime/${malId}/${episode}/dub`,
+  },
+  {
+    key: "vidplus-dub",
+    label: "VidPlus (Dub)",
+    subOrDub: "dub",
+    getUrl: ({ anilistId }, episode) =>
+      `https://player.vidplus.to/embed/anime/${anilistId}/${episode}?dub=true`,
   },
   {
     key: "aniwatch-dub",
