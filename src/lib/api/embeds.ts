@@ -3,10 +3,10 @@ import { getAniListIdByMalId } from "./anilist";
 
 export const EMBED_SERVERS: EmbedServer[] = [
   // ── SUB servers ────────────────────────────────────────────────────────────
-  // The player-only iframes (VidNest, VidLink, VidPlus) load from the viewer's
-  // browser (residential IP), so they work reliably on Vercel. HiAnime and
-  // Senshi are server-side scrapers whose upstreams block Vercel's datacenter
-  // IPs — they work locally but fall through in prod. VidNest is the default.
+  // VidNest is a player-only iframe that loads from the viewer's browser
+  // (residential IP), so it works reliably on Vercel. HiAnime and Senshi are
+  // resolved server-side as HLS streams (see sources/route.ts) and played
+  // through the /api/hls proxy — they have no iframe URL. VidNest is the default.
   {
     key: "vidnest-sub",
     label: "VidNest",
@@ -16,35 +16,18 @@ export const EMBED_SERVERS: EmbedServer[] = [
       `https://vidnest.fun/anime/${anilistId}/${episode}/sub`,
   },
   {
-    key: "vidlink-sub",
-    label: "VidLink",
-    subOrDub: "sub",
-    // VidLink keys its catalog by MAL ID: /anime/{malId}/{episode}/{sub|dub}.
-    getUrl: ({ malId }, episode) =>
-      `https://vidlink.pro/anime/${malId}/${episode}/sub`,
-  },
-  {
-    key: "vidplus-sub",
-    label: "VidPlus",
-    subOrDub: "sub",
-    // VidPlus keys its catalog by AniList ID with a ?dub flag.
-    getUrl: ({ anilistId }, episode) =>
-      `https://player.vidplus.to/embed/anime/${anilistId}/${episode}?dub=false`,
-  },
-  {
     key: "aniwatch-sub",
     label: "HiAnime",
     subOrDub: "sub",
     getUrl: () => "", // resolved server-side via aniwatch SDK
   },
   {
-    // Senshi is played as an HLS stream in sources/route.ts; this URL is only a
-    // last-resort iframe fallback.
+    // Senshi is resolved server-side as an HLS stream in sources/route.ts and
+    // played via the /api/hls proxy; it has no iframe URL.
     key: "senshi-sub",
     label: "Senshi",
     subOrDub: "sub",
-    getUrl: ({ malId }, episode) =>
-      `https://senshi.live/watch/${malId}/${episode}`,
+    getUrl: () => "",
   },
 
   // ── DUB servers ────────────────────────────────────────────────────────────
@@ -56,20 +39,6 @@ export const EMBED_SERVERS: EmbedServer[] = [
       `https://vidnest.fun/anime/${anilistId}/${episode}/dub`,
   },
   {
-    key: "vidlink-dub",
-    label: "VidLink (Dub)",
-    subOrDub: "dub",
-    getUrl: ({ malId }, episode) =>
-      `https://vidlink.pro/anime/${malId}/${episode}/dub`,
-  },
-  {
-    key: "vidplus-dub",
-    label: "VidPlus (Dub)",
-    subOrDub: "dub",
-    getUrl: ({ anilistId }, episode) =>
-      `https://player.vidplus.to/embed/anime/${anilistId}/${episode}?dub=true`,
-  },
-  {
     key: "aniwatch-dub",
     label: "HiAnime (Dub)",
     subOrDub: "dub",
@@ -79,8 +48,7 @@ export const EMBED_SERVERS: EmbedServer[] = [
     key: "senshi-dub",
     label: "Senshi (Dub)",
     subOrDub: "dub",
-    getUrl: ({ malId }, episode) =>
-      `https://senshi.live/watch/${malId}/${episode}?dub=1`,
+    getUrl: () => "",
   },
 ];
 
