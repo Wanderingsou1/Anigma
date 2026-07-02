@@ -9,10 +9,45 @@ import type {
 
 const BASE = "https://api.jikan.moe/v4";
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Dedupe identical concurrent requests so the detail page's parallel calls
+// (details/characters/recommendations/episodes) don't each re-hit Jikan.
+const inFlight = new Map<string, Promise<unknown>>();
+
+/**
+ * Fetch from Jikan with retry on 429 (rate limit) / 5xx. Jikan allows only
+ * ~3 req/s, and the app fires several calls in parallel per page, so without
+ * this a burst returns 429 → the anime appears as "not found".
+ */
 async function jikanFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { next: { revalidate: 600 } });
-  if (!res.ok) throw new Error(`Jikan ${path} → ${res.status}`);
-  return res.json() as Promise<T>;
+  const existing = inFlight.get(path);
+  if (existing) return existing as Promise<T>;
+
+  const run = (async (): Promise<T> => {
+    const MAX_RETRIES = 4;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const res = await fetch(`${BASE}${path}`, { next: { revalidate: 600 } });
+      if (res.ok) return (await res.json()) as T;
+
+      // Retry on rate-limit and transient server errors with backoff.
+      if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
+        const retryAfter = Number(res.headers.get("retry-after")) * 1000;
+        const backoff = retryAfter || 500 * Math.pow(2, attempt); // 0.5s,1s,2s,4s
+        await sleep(backoff);
+        continue;
+      }
+      throw new Error(`Jikan ${path} → ${res.status}`);
+    }
+    throw new Error(`Jikan ${path} → exhausted retries`);
+  })();
+
+  inFlight.set(path, run);
+  try {
+    return await run;
+  } finally {
+    inFlight.delete(path);
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

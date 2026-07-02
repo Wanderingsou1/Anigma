@@ -3,20 +3,23 @@ import { getAniListIdByMalId } from "./anilist";
 
 export const EMBED_SERVERS: EmbedServer[] = [
   // ── SUB servers ────────────────────────────────────────────────────────────
+  // VidNest is listed first: it is a player-only iframe that loads from the
+  // viewer's browser (residential IP), so it's the only server that reliably
+  // works on Vercel. HiAnime and Senshi are server-side scrapers whose upstreams
+  // block Vercel's datacenter IPs — they work locally but fall through in prod.
   {
-    key: "aniwatch-sub",
-    label: "HiAnime",
-    subOrDub: "sub",
-    getUrl: () => "", // resolved server-side via aniwatch SDK
-  },
-  {
-    // Player-only iframe embed (loads from the viewer's browser — no Vercel IP block)
     key: "vidnest-sub",
     label: "VidNest",
     subOrDub: "sub",
     // VidNest keys its catalog by AniList ID.
     getUrl: ({ anilistId }, episode) =>
       `https://vidnest.fun/anime/${anilistId}/${episode}/sub`,
+  },
+  {
+    key: "aniwatch-sub",
+    label: "HiAnime",
+    subOrDub: "sub",
+    getUrl: () => "", // resolved server-side via aniwatch SDK
   },
   {
     // Senshi is played as an HLS stream in sources/route.ts; this URL is only a
@@ -30,17 +33,17 @@ export const EMBED_SERVERS: EmbedServer[] = [
 
   // ── DUB servers ────────────────────────────────────────────────────────────
   {
-    key: "aniwatch-dub",
-    label: "HiAnime (Dub)",
-    subOrDub: "dub",
-    getUrl: () => "",
-  },
-  {
     key: "vidnest-dub",
     label: "VidNest (Dub)",
     subOrDub: "dub",
     getUrl: ({ anilistId }, episode) =>
       `https://vidnest.fun/anime/${anilistId}/${episode}/dub`,
+  },
+  {
+    key: "aniwatch-dub",
+    label: "HiAnime (Dub)",
+    subOrDub: "dub",
+    getUrl: () => "",
   },
   {
     key: "senshi-dub",

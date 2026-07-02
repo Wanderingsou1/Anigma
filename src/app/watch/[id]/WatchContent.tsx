@@ -19,7 +19,7 @@ export default function WatchContent({ id }: { id: string }) {
   const [subOrDub, setSubOrDub] = useState<"sub" | "dub">(
     searchParams.get("subOrDub") === "dub" ? "dub" : "sub"
   );
-  const [serverKey, setServerKey] = useState(searchParams.get("server") ?? "aniwatch-sub");
+  const [serverKey, setServerKey] = useState(searchParams.get("server") ?? "vidnest-sub");
   const [loadingAnime, setLoadingAnime] = useState(true);
   const [loadingSource, setLoadingSource] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);

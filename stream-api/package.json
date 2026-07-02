@@ -1,0 +1,18 @@
+{
+  "name": "anigma-stream-api",
+  "version": "1.0.0",
+  "description": "Standalone HiAnime scraping service for Anigma. Deploy on a non-datacenter host so streaming sites don't block it.",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "aniwatch": "^2.27.9",
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  }
+}
