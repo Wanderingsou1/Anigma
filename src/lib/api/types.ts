@@ -94,12 +94,19 @@ export interface ScheduleDay {
   anime: AnimeData[];
 }
 
+// IDs a streaming provider may need. Providers differ: some key their catalog
+// by MyAnimeList ID, others (e.g. VidNest) by AniList ID.
+export interface EmbedIds {
+  malId: number;
+  anilistId: number;
+}
+
 // Embed streaming server definition
 export interface EmbedServer {
   key: string;
   label: string;
   subOrDub: "sub" | "dub";
-  getUrl: (malId: number, episode: number) => string;
+  getUrl: (ids: EmbedIds, episode: number) => string;
 }
 
 // AniList specific types

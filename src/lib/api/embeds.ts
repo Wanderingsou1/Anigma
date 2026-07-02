@@ -1,4 +1,5 @@
 import type { EmbedServer } from "./types";
+import { getAniListIdByMalId } from "./anilist";
 
 export const EMBED_SERVERS: EmbedServer[] = [
   // ── SUB servers ────────────────────────────────────────────────────────────
@@ -13,8 +14,9 @@ export const EMBED_SERVERS: EmbedServer[] = [
     key: "vidnest-sub",
     label: "VidNest",
     subOrDub: "sub",
-    getUrl: (malId, episode) =>
-      `https://vidnest.fun/anime/${malId}/${episode}/sub`,
+    // VidNest keys its catalog by AniList ID.
+    getUrl: ({ anilistId }, episode) =>
+      `https://vidnest.fun/anime/${anilistId}/${episode}/sub`,
   },
   {
     // Senshi is played as an HLS stream in sources/route.ts; this URL is only a
@@ -22,7 +24,7 @@ export const EMBED_SERVERS: EmbedServer[] = [
     key: "senshi-sub",
     label: "Senshi",
     subOrDub: "sub",
-    getUrl: (malId, episode) =>
+    getUrl: ({ malId }, episode) =>
       `https://senshi.live/watch/${malId}/${episode}`,
   },
 
@@ -37,14 +39,14 @@ export const EMBED_SERVERS: EmbedServer[] = [
     key: "vidnest-dub",
     label: "VidNest (Dub)",
     subOrDub: "dub",
-    getUrl: (malId, episode) =>
-      `https://vidnest.fun/anime/${malId}/${episode}/dub`,
+    getUrl: ({ anilistId }, episode) =>
+      `https://vidnest.fun/anime/${anilistId}/${episode}/dub`,
   },
   {
     key: "senshi-dub",
     label: "Senshi (Dub)",
     subOrDub: "dub",
-    getUrl: (malId, episode) =>
+    getUrl: ({ malId }, episode) =>
       `https://senshi.live/watch/${malId}/${episode}?dub=1`,
   },
 ];
@@ -73,19 +75,23 @@ export interface EmbedSourceResponse {
   };
 }
 
-export function buildSourceResponse(
+export async function buildSourceResponse(
   malId: number,
   episode: number,
   serverKey: string,
-  subOrDub: "sub" | "dub"
-): EmbedSourceResponse {
+  subOrDub: "sub" | "dub",
+  anilistId?: number
+): Promise<EmbedSourceResponse> {
   const server = getEmbedServer(serverKey) ?? getDefaultServer(subOrDub);
+  // Some providers key by AniList ID; resolve it from the MAL ID when unknown.
+  const resolvedAniListId =
+    anilistId || (await getAniListIdByMalId(malId)) || malId;
   return {
     malId,
     episode,
     subOrDub: server.subOrDub,
     serverKey: server.key,
-    embedUrl: server.getUrl(malId, episode),
+    embedUrl: server.getUrl({ malId, anilistId: resolvedAniListId }, episode),
     servers: {
       sub: SUB_SERVERS.map((s) => ({ key: s.key, label: s.label })),
       dub: DUB_SERVERS.map((s) => ({ key: s.key, label: s.label })),

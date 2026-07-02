@@ -76,7 +76,7 @@ export async function GET(
     if (!anime?.malId) {
       return NextResponse.json({ error: "Anime not found" }, { status: 404 });
     }
-    const { malId, title } = anime;
+    const { malId, title, anilistId } = anime;
 
     const usingAniwatch = !serverKey || serverKey.startsWith("aniwatch");
     const usingSenshi = serverKey.startsWith("senshi");
@@ -85,7 +85,7 @@ export async function GET(
     if (usingAniwatch) {
       const hlsUrl = await getAniWatchHlsUrl(title, episode, subOrDub);
       if (hlsUrl) {
-        const base = buildSourceResponse(malId, episode, "aniwatch-" + subOrDub, subOrDub);
+        const base = await buildSourceResponse(malId, episode, "aniwatch-" + subOrDub, subOrDub, anilistId);
         return NextResponse.json(
           { ...base, serverKey: "aniwatch-" + subOrDub, embedUrl: hlsUrl, type: "hls" },
           { headers: { "Cache-Control": "public, s-maxage=55, stale-while-revalidate=300" } }
@@ -97,7 +97,7 @@ export async function GET(
     if (usingAniwatch || usingSenshi) {
       const hlsUrl = await getSenshiHlsUrl(malId, episode);
       if (hlsUrl) {
-        const base = buildSourceResponse(malId, episode, "senshi-" + subOrDub, subOrDub);
+        const base = await buildSourceResponse(malId, episode, "senshi-" + subOrDub, subOrDub, anilistId);
         return NextResponse.json(
           { ...base, embedUrl: hlsUrl, type: "hls" },
           { headers: { "Cache-Control": "public, s-maxage=55, stale-while-revalidate=300" } }
@@ -116,7 +116,7 @@ export async function GET(
       serverKey.startsWith("senshi")
         ? "vidnest-" + subOrDub
         : serverKey;
-    const result = buildSourceResponse(malId, episode, fallbackKey, subOrDub);
+    const result = await buildSourceResponse(malId, episode, fallbackKey, subOrDub, anilistId);
     return NextResponse.json(
       { ...result, type: "iframe" },
       { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } }

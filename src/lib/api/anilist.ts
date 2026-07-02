@@ -153,6 +153,23 @@ export async function searchAniList(
   };
 }
 
+/**
+ * Resolve an AniList anime ID from a MyAnimeList ID. Needed because some
+ * streaming providers (e.g. VidNest) key their catalog by AniList ID, not MAL.
+ */
+export async function getAniListIdByMalId(malId: number): Promise<number | null> {
+  if (!malId) return null;
+  try {
+    const data = await query<{ Media: { id: number } | null }>(
+      `query ($m: Int) { Media(idMal: $m, type: ANIME) { id } }`,
+      { m: malId }
+    );
+    return data.Media?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getAnimeByAniListId(anilistId: number): Promise<AnimeData | null> {
   try {
     const data = await query<{ Media: unknown }>(
