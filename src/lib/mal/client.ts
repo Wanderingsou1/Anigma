@@ -183,6 +183,21 @@ export async function malPatch<T = unknown>(userId: string, path: string, form: 
   return res.json();
 }
 
+export async function malDelete(userId: string, path: string): Promise<void> {
+  const token = await getValidAccessToken(userId);
+  if (!token) throw new Error("No MAL account connected");
+
+  const res = await fetch(`${MAL_API_BASE}${path}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  // MAL returns 404 if the title was already off the list — treat that as success.
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text();
+    throw new Error(`MAL DELETE ${path} failed: ${res.status} ${text}`);
+  }
+}
+
 export async function getMalAnimeList(userId: string): Promise<MalListEntry[]> {
   const token = await getValidAccessToken(userId);
   if (!token) throw new Error("No MAL account connected");

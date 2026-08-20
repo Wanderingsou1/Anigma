@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { label: "Browse", href: "/browse" },
   { label: "New Releases", href: "/new-releases" },
   { label: "Popular", href: "/popular" },
+  { label: "MAL Watchlist", href: "/watchlist" },
 ];
 
 export default function Navbar() {
