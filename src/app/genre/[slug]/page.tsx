@@ -2,7 +2,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AnimeCard from "@/components/AnimeCard";
 import { GENRES } from "@/lib/data";
-import { getAnimeByGenre } from "@/lib/api/jikan";
+import { searchAniList, ANILIST_TAG_ONLY_GENRES } from "@/lib/api/anilist";
 import type { Metadata } from "next";
 
 const GENRE_META: Record<string, { icon: string; color: string; desc: string }> = {
@@ -33,7 +33,17 @@ export default async function GenrePage({ params }: { params: Promise<{ slug: st
   const { slug } = await params;
   const genreName = slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   const meta = GENRE_META[slug] ?? { icon: "🎬", color: "from-[#1a1a2e] to-[#08080f]", desc: `Explore the best ${genreName} anime.` };
-  const result = await getAnimeByGenre(slug, 1, 24);
+
+  // Match against our canonical GENRES list to get AniList's exact label (e.g. "Sci-Fi" keeps its hyphen).
+  const matchedGenre = GENRES.find((g) => g.toLowerCase().replace(/\s+/g, "-") === slug.toLowerCase());
+  const anilistLabel = matchedGenre ?? genreName;
+  const isTag = ANILIST_TAG_ONLY_GENRES.has(slug.toLowerCase());
+  const result = await searchAniList(
+    "",
+    1,
+    24,
+    isTag ? { tag: anilistLabel, sort: "POPULARITY_DESC" } : { genre: anilistLabel, sort: "POPULARITY_DESC" }
+  );
   const otherGenres = GENRES.filter((g) => g.toLowerCase() !== genreName.toLowerCase()).slice(0, 12);
 
   return (

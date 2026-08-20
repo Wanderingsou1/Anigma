@@ -151,7 +151,7 @@ function SearchContent() {
                 <GridSkeleton count={12} />
               ) : results.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                  {results.map((anime, i) => <AnimeCard key={anime.malId} anime={anime} index={i} />)}
+                  {results.map((anime, i) => <AnimeCard key={anime.id || anime.malId} anime={anime} index={i} />)}
                 </div>
               ) : (
                 <div className="text-center py-24 animate-fade-in-up">

@@ -102,12 +102,112 @@ export async function getTrendingAnime(page = 1, perPage = 20): Promise<AnimeDat
   const data = await query<{ Page: { media: unknown[] } }>(
     `query ($page: Int, $perPage: Int) {
       Page(page: $page, perPage: $perPage) {
-        media(type: ANIME, sort: TRENDING_DESC, status: RELEASING) { ${MEDIA_FIELDS} }
+        media(type: ANIME, sort: TRENDING_DESC, status: RELEASING, isAdult: false) { ${MEDIA_FIELDS} }
       }
     }`,
     { page, perPage }
   );
   return (data.Page?.media ?? []).map(normalize);
+}
+
+export async function getTopRatedAnime(page = 1, perPage = 20): Promise<AnimeData[]> {
+  const data = await query<{ Page: { media: unknown[] } }>(
+    `query ($page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        media(type: ANIME, sort: SCORE_DESC, isAdult: false) { ${MEDIA_FIELDS} }
+      }
+    }`,
+    { page, perPage }
+  );
+  return (data.Page?.media ?? []).map(normalize);
+}
+
+export async function getOngoingAnime(page = 1, perPage = 20): Promise<AnimeData[]> {
+  const data = await query<{ Page: { media: unknown[] } }>(
+    `query ($page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        media(type: ANIME, status: RELEASING, sort: POPULARITY_DESC, isAdult: false) { ${MEDIA_FIELDS} }
+      }
+    }`,
+    { page, perPage }
+  );
+  return (data.Page?.media ?? []).map(normalize);
+}
+
+export async function getCompletedAnime(page = 1, perPage = 20): Promise<AnimeData[]> {
+  const data = await query<{ Page: { media: unknown[] } }>(
+    `query ($page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        media(type: ANIME, status: FINISHED, sort: POPULARITY_DESC, isAdult: false) { ${MEDIA_FIELDS} }
+      }
+    }`,
+    { page, perPage }
+  );
+  return (data.Page?.media ?? []).map(normalize);
+}
+
+/** Anime with averageScore >= 80 (AniList has no min-score query arg, so we over-fetch and filter). */
+export async function getRecommendedAnime(perPage = 10): Promise<AnimeData[]> {
+  const data = await query<{ Page: { media: unknown[] } }>(
+    `query ($page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        media(type: ANIME, sort: SCORE_DESC, isAdult: false) { ${MEDIA_FIELDS} }
+      }
+    }`,
+    { page: 1, perPage: perPage * 3 }
+  );
+  return (data.Page?.media ?? [])
+    .map(normalize)
+    .filter((a) => a.rating >= 8)
+    .slice(0, perPage);
+}
+
+export async function getNewReleases(page = 1, perPage = 24): Promise<PaginatedResponse<AnimeData>> {
+  // AniList sorts null startDate entries first in DESC order, which surfaces old/undated
+  // titles ahead of genuinely recent ones — excluding anything older than ~2 years works
+  // around that and keeps this feed meaningfully "new".
+  const cutoffYear = new Date().getFullYear() - 2;
+  const startDateGreater = cutoffYear * 10000 + 101; // FuzzyDateInt format YYYYMMDD
+
+  const data = await query<{ Page: { media: unknown[]; pageInfo: { total: number; currentPage: number; lastPage: number; hasNextPage: boolean } } }>(
+    `query ($page: Int, $perPage: Int, $startDateGreater: FuzzyDateInt) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { total currentPage lastPage hasNextPage }
+        media(type: ANIME, sort: START_DATE_DESC, status_in: [RELEASING, FINISHED], startDate_greater: $startDateGreater, isAdult: false) { ${MEDIA_FIELDS} }
+      }
+    }`,
+    { page, perPage, startDateGreater }
+  );
+  return {
+    data: (data.Page?.media ?? []).map(normalize),
+    pagination: {
+      lastVisiblePage: data.Page?.pageInfo?.lastPage ?? page,
+      hasNextPage: data.Page?.pageInfo?.hasNextPage ?? false,
+      currentPage: data.Page?.pageInfo?.currentPage ?? page,
+      totalItems: data.Page?.pageInfo?.total ?? 0,
+    },
+  };
+}
+
+export async function getPopularAnime(page = 1, perPage = 24): Promise<PaginatedResponse<AnimeData>> {
+  const data = await query<{ Page: { media: unknown[]; pageInfo: { total: number; currentPage: number; lastPage: number; hasNextPage: boolean } } }>(
+    `query ($page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { total currentPage lastPage hasNextPage }
+        media(type: ANIME, sort: POPULARITY_DESC, isAdult: false) { ${MEDIA_FIELDS} }
+      }
+    }`,
+    { page, perPage }
+  );
+  return {
+    data: (data.Page?.media ?? []).map(normalize),
+    pagination: {
+      lastVisiblePage: data.Page?.pageInfo?.lastPage ?? page,
+      hasNextPage: data.Page?.pageInfo?.hasNextPage ?? false,
+      currentPage: data.Page?.pageInfo?.currentPage ?? page,
+      totalItems: data.Page?.pageInfo?.total ?? 0,
+    },
+  };
 }
 
 export async function getPopularThisSeason(perPage = 20): Promise<AnimeData[]> {
@@ -120,7 +220,7 @@ export async function getPopularThisSeason(perPage = 20): Promise<AnimeData[]> {
   const data = await query<{ Page: { media: unknown[] } }>(
     `query ($page: Int, $perPage: Int, $season: MediaSeason, $year: Int) {
       Page(page: $page, perPage: $perPage) {
-        media(type: ANIME, sort: POPULARITY_DESC, season: $season, seasonYear: $year) { ${MEDIA_FIELDS} }
+        media(type: ANIME, sort: POPULARITY_DESC, season: $season, seasonYear: $year, isAdult: false) { ${MEDIA_FIELDS} }
       }
     }`,
     { page: 1, perPage, season, year }
@@ -128,19 +228,50 @@ export async function getPopularThisSeason(perPage = 20): Promise<AnimeData[]> {
   return (data.Page?.media ?? []).map(normalize);
 }
 
+// AniList treats these as tags, not genres — the "genre" filter would silently return nothing for them.
+export const ANILIST_TAG_ONLY_GENRES = new Set([
+  "isekai", "military", "samurai", "school", "seinen", "shounen", "super power",
+]);
+
+export type AniListSort =
+  | "SEARCH_MATCH"
+  | "POPULARITY_DESC"
+  | "SCORE_DESC"
+  | "START_DATE_DESC"
+  | "TITLE_ROMAJI";
+
+export interface SearchAniListOptions {
+  genre?: string;
+  tag?: string;
+  format?: string; // AniList MediaFormat: TV, TV_SHORT, MOVIE, SPECIAL, OVA, ONA, MUSIC
+  status?: "RELEASING" | "FINISHED" | "NOT_YET_RELEASED" | "CANCELLED" | "HIATUS";
+  sort?: AniListSort;
+}
+
 export async function searchAniList(
   q: string,
   page = 1,
-  perPage = 24
+  perPage = 24,
+  opts: SearchAniListOptions = {}
 ): Promise<PaginatedResponse<AnimeData>> {
+  const sort = opts.sort ?? (q ? "SEARCH_MATCH" : "POPULARITY_DESC");
   const data = await query<{ Page: { media: unknown[]; pageInfo: { total: number; currentPage: number; lastPage: number; hasNextPage: boolean } } }>(
-    `query ($q: String, $page: Int, $perPage: Int) {
+    `query ($q: String, $page: Int, $perPage: Int, $genre: String, $tag: String, $format: MediaFormat, $status: MediaStatus, $sort: [MediaSort]) {
       Page(page: $page, perPage: $perPage) {
         pageInfo { total currentPage lastPage hasNextPage }
-        media(type: ANIME, search: $q, sort: SEARCH_MATCH) { ${MEDIA_FIELDS} }
+        media(type: ANIME, search: $q, genre: $genre, tag: $tag, format: $format, status: $status, sort: $sort, isAdult: false) { ${MEDIA_FIELDS} }
       }
     }`,
-    { q, page, perPage }
+    {
+      q: q || undefined,
+      page,
+      perPage,
+      genre: opts.genre || undefined,
+      tag: opts.tag || undefined,
+      format: opts.format || undefined,
+      status: opts.status || undefined,
+      sort: [sort],
+    }
   );
   return {
     data: (data.Page?.media ?? []).map(normalize),

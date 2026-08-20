@@ -241,7 +241,7 @@ function BrowseContent() {
                     </h3>
                     <ul className="flex flex-col gap-2">
                       {anime && anime.slice(0, 15).map((a: AnimeData) => (
-                        <li key={a.malId} className="flex items-center gap-2 text-sm text-[#9898b8] hover:text-white transition-colors cursor-pointer">
+                        <li key={a.id || a.malId} className="flex items-center gap-2 text-sm text-[#9898b8] hover:text-white transition-colors cursor-pointer">
                           <Link href={`/anime/${encodeURIComponent(a.id || String(a.malId))}`} className="flex items-center gap-2 truncate w-full">
                             <svg className="w-3 h-3 fill-[#7c3aed] flex-shrink-0" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                             <span className="truncate">{a.title}</span>
@@ -394,7 +394,7 @@ function BrowseContent() {
                   <>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {animeList.map((anime, i) => (
-                        <AnimeCard key={anime.malId} anime={anime} index={i} />
+                        <AnimeCard key={anime.id || anime.malId} anime={anime} index={i} />
                       ))}
                     </div>
 

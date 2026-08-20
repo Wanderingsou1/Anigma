@@ -69,7 +69,7 @@ export default function Carousel({ title, anime, viewAllHref, isLoading = false 
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
           {anime.map((a, i) => (
-            <div key={a.malId} className="flex-none w-[160px] sm:w-[180px] md:w-[200px]">
+            <div key={a.id || a.malId} className="flex-none w-[160px] sm:w-[180px] md:w-[200px]">
               <AnimeCard anime={a} index={i} />
             </div>
           ))}
