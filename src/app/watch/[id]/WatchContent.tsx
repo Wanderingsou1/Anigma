@@ -72,6 +72,19 @@ export default function WatchContent({ id }: { id: string }) {
       .finally(() => setLoadingSource(false));
   }, [anime?.malId, currentEp, serverKey, subOrDub, id]);
 
+  // Sync watch progress to MyAnimeList a few seconds after settling on an episode
+  useEffect(() => {
+    if (!anime?.malId) return;
+    const timer = setTimeout(() => {
+      fetch(`/api/mal/list/${anime.malId}/track`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ episode: currentEp }),
+      }).catch(() => {});
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [anime?.malId, currentEp]);
+
   // HLS.js player for direct stream sources
   useEffect(() => {
     const src = (source as (typeof source & { type?: string }) | null);

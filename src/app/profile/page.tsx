@@ -1,30 +1,40 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AnimeCard from "@/components/AnimeCard";
 import { CARD_GRADIENTS } from "@/lib/data";
-import type { AnimeData } from "@/lib/api/types";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import Image from "next/image";
+import { Suspense } from "react";
+import type { MalListEntry, MalListStatus } from "@/lib/mal/client";
+import ContinueWatching from "@/components/ContinueWatching";
 
 const TABS = ["Overview", "Watchlist", "History", "Settings"] as const;
 type Tab = typeof TABS[number];
 
-export default function ProfilePage() {
+function ProfileContent() {
   const { data: session, status, update: updateSession } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<Tab>("Overview");
+  const [activeTab, setActiveTab] = useState<Tab>(
+    (searchParams.get("tab") as Tab) && TABS.includes(searchParams.get("tab") as Tab)
+      ? (searchParams.get("tab") as Tab)
+      : "Overview"
+  );
+
+  const [togglingSync, setTogglingSync] = useState(false);
 
   // Loaded user data state
   const [profileData, setProfileData] = useState<any>(null);
-  const [watchlist, setWatchlist] = useState<any[]>([]);
+  const [malList, setMalList] = useState<MalListEntry[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [updatingStatusFor, setUpdatingStatusFor] = useState<number | null>(null);
 
   // Settings edit states
   const [editUsername, setEditUsername] = useState("");
@@ -35,14 +45,6 @@ export default function ProfilePage() {
   const [settingsSuccess, setSettingsSuccess] = useState("");
   const [settingsError, setSettingsError] = useState("");
 
-  // Password change states
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [passwordSuccess, setPasswordSuccess] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-
   // Load all dashboard info from API when available.
   useEffect(() => {
     if (status === "loading") {
@@ -52,9 +54,9 @@ export default function ProfilePage() {
     const loadAllData = async () => {
       setLoadingData(true);
       try {
-        const [profileRes, watchlistRes, historyRes, favoritesRes] = await Promise.all([
+        const [profileRes, malListRes, historyRes, favoritesRes] = await Promise.all([
           fetch("/api/user/profile"),
-          fetch("/api/user/watchlist"),
+          fetch("/api/mal/list"),
           fetch("/api/user/history"),
           fetch("/api/user/favorites"),
         ]);
@@ -67,9 +69,9 @@ export default function ProfilePage() {
           setSelectedPlan(p.data.plan || "free");
           setSelectedGenres(p.data.favoriteGenres || []);
         }
-        if (watchlistRes.ok) {
-          const w = await watchlistRes.json();
-          setWatchlist(w.data || []);
+        if (malListRes.ok) {
+          const w = await malListRes.json();
+          setMalList(w.data || []);
         }
         if (historyRes.ok) {
           const h = await historyRes.json();
@@ -89,6 +91,183 @@ export default function ProfilePage() {
     loadAllData();
   }, [status]);
 
+  const handleToggleMalSync = async (enabled: boolean) => {
+    setTogglingSync(true);
+    try {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ malSyncEnabled: enabled }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setProfileData(json.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTogglingSync(false);
+    }
+  };
+
+  const MAL_STATUS_OPTIONS = [
+    { value: "watching", label: "Watching" },
+    { value: "completed", label: "Completed" },
+    { value: "on_hold", label: "On Hold" },
+    { value: "dropped", label: "Dropped" },
+    { value: "plan_to_watch", label: "Plan to Watch" },
+  ];
+
+  const handleMalStatusChange = async (malId: number, newStatus: MalListStatus) => {
+    setUpdatingStatusFor(malId);
+    try {
+      const res = await fetch(`/api/mal/list/${malId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        setMalList((prev) =>
+          prev.map((entry) =>
+            entry.anime.malId === malId ? { ...entry, listStatus: newStatus } : entry
+          )
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUpdatingStatusFor(null);
+    }
+  };
+
+  const handleMalEpisodeChange = async (entry: MalListEntry, delta: number) => {
+    const malId = entry.anime.malId;
+    const total = entry.anime.episodes || 0;
+    const raw = (entry.malProgress || 0) + delta;
+    const newEpisode = total > 0 ? Math.max(0, Math.min(raw, total)) : Math.max(0, raw);
+    if (newEpisode === entry.malProgress) return;
+
+    let newStatus = entry.listStatus;
+    if (delta > 0) {
+      if (total > 0 && newEpisode >= total) newStatus = "completed";
+      else if (entry.listStatus === "plan_to_watch") newStatus = "watching";
+    }
+
+    setUpdatingStatusFor(malId);
+    try {
+      const res = await fetch(`/api/mal/list/${malId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          episode: newEpisode,
+          ...(newStatus !== entry.listStatus ? { status: newStatus } : {}),
+        }),
+      });
+      if (res.ok) {
+        setMalList((prev) =>
+          prev.map((e) =>
+            e.anime.malId === malId ? { ...e, malProgress: newEpisode, listStatus: newStatus } : e
+          )
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUpdatingStatusFor(null);
+    }
+  };
+
+  const handleMalScoreChange = async (malId: number, newScore: number) => {
+    setUpdatingStatusFor(malId);
+    try {
+      const res = await fetch(`/api/mal/list/${malId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ score: newScore }),
+      });
+      if (res.ok) {
+        setMalList((prev) =>
+          prev.map((e) => (e.anime.malId === malId ? { ...e, userScore: newScore } : e))
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUpdatingStatusFor(null);
+    }
+  };
+
+  const renderMalCard = (entry: MalListEntry, i: number) => {
+    const total = entry.anime.episodes || 0;
+    const progress = entry.malProgress || 0;
+    const isUpdating = updatingStatusFor === entry.anime.malId;
+    return (
+      <div key={entry.anime.malId} className="space-y-2">
+        <AnimeCard anime={entry.anime} index={i} />
+
+        <div className="flex items-center justify-between gap-2 px-0.5">
+          <span className="text-xs text-[#9898b8]">
+            Ep {progress}
+            {total > 0 ? ` / ${total}` : ""}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => handleMalEpisodeChange(entry, -1)}
+              disabled={isUpdating || progress <= 0}
+              className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold disabled:opacity-30 transition-all cursor-pointer"
+            >
+              −
+            </button>
+            <button
+              onClick={() => handleMalEpisodeChange(entry, 1)}
+              disabled={isUpdating || (total > 0 && progress >= total)}
+              className="w-6 h-6 rounded-full brand-gradient text-white text-xs font-bold disabled:opacity-30 transition-all cursor-pointer"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <Link
+          href={`/watch/${encodeURIComponent(`mal::${entry.anime.malId}`)}?ep=${Math.min(progress + 1, total || progress + 1)}`}
+          className="block w-full text-center py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white text-xs font-semibold transition-all"
+        >
+          {progress > 0 ? "Continue" : "Start Watching"}
+        </Link>
+
+        <select
+          value={entry.listStatus}
+          onChange={(e) => handleMalStatusChange(entry.anime.malId, e.target.value as MalListStatus)}
+          disabled={isUpdating}
+          className="w-full bg-[#12121f] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[#7c3aed]/60 disabled:opacity-50 cursor-pointer"
+        >
+          {MAL_STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value} className="bg-[#0f0f1a]">
+              {opt.label}
+            </option>
+          ))}
+        </select>
+
+        <div className="flex items-center justify-between gap-2 px-0.5">
+          <span className="text-xs text-[#9898b8]">My Score</span>
+          <select
+            value={entry.userScore || 0}
+            onChange={(e) => handleMalScoreChange(entry.anime.malId, Number(e.target.value))}
+            disabled={isUpdating}
+            className="bg-[#12121f] border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-[#7c3aed]/60 disabled:opacity-50 cursor-pointer"
+          >
+            <option value={0} className="bg-[#0f0f1a]">—</option>
+            {Array.from({ length: 10 }, (_, n) => n + 1).map((n) => (
+              <option key={n} value={n} className="bg-[#0f0f1a]">
+                {n} ★
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    );
+  };
+
   if (status === "loading" || loadingData) {
     return (
       <div className="min-h-screen bg-[#08080f] flex items-center justify-center">
@@ -100,27 +279,9 @@ export default function ProfilePage() {
     );
   }
 
-  // Compute distinct continue watching items
-  const continueWatching: any[] = [];
-  const seenIds = new Set();
-  for (const item of history) {
-    if (!seenIds.has(item.animeId)) {
-      seenIds.add(item.animeId);
-      continueWatching.push({
-        id: item._id,
-        animeId: item.animeId,
-        title: item.title,
-        imageUrl: item.imageUrl,
-        episodeNumber: item.episodeNumber,
-        progress: item.progress,
-      });
-    }
-    if (continueWatching.length >= 3) break;
-  }
-
   // Stats
   const watchedCount = history.length;
-  const watchlistCount = watchlist.length;
+  const watchlistCount = malList.length;
   const hoursCount = Math.round(watchedCount * 0.4); // 24 min per episode = 0.4 hrs
   const favoritesCount = favorites.length;
 
@@ -165,47 +326,6 @@ export default function ProfilePage() {
     }
   };
 
-  // Password update
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setChangingPassword(true);
-    setPasswordSuccess("");
-    setPasswordError("");
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError("New passwords do not match.");
-      setChangingPassword(false);
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/user/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          currentPassword,
-          newPassword,
-          confirmPassword,
-        }),
-      });
-
-      const resData = await res.json();
-      if (!res.ok) {
-        setPasswordError(resData.error || "Failed to change password.");
-      } else {
-        setPasswordSuccess("Password updated successfully!");
-        setCurrentPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
-      }
-    } catch (err) {
-      console.error(err);
-      setPasswordError("An unexpected error occurred.");
-    } finally {
-      setChangingPassword(false);
-    }
-  };
-
   // Account deletion
   const handleDeleteAccount = async () => {
     if (!window.confirm("WARNING: Are you absolutely sure you want to delete your Anigma account? This action is irreversible and will delete your entire watchlist, favorites, and history.")) {
@@ -226,32 +346,6 @@ export default function ProfilePage() {
       alert("An unexpected error occurred.");
     }
   };
-
-  // Map database item structures (with animeId, title, etc) into AnimeCard-compatible AnimeData shape
-  const mapItemToAnimeData = (item: any): AnimeData => ({
-    id: `jikan::${item.animeId}`,
-    malId: item.animeId,
-    title: item.title,
-    titleJapanese: "",
-    titleEnglish: item.title,
-    synopsis: "",
-    genres: [],
-    type: item.type || "TV",
-    status: item.status || "ongoing",
-    rating: item.rating || 0.0,
-    episodes: 0,
-    currentEpisode: 0,
-    year: 0,
-    season: "",
-    studio: "",
-    duration: "",
-    source: "",
-    imageUrl: item.imageUrl || "",
-    imageLargeUrl: item.imageUrl || "",
-    bannerUrl: "",
-    tags: [],
-    airing: false,
-  });
 
   const memberDate = profileData?.createdAt ? new Date(profileData.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short" }) : "Jan 2026";
 
@@ -341,51 +435,7 @@ export default function ProfilePage() {
         <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-10">
           {activeTab === "Overview" && (
             <div className="space-y-12 animate-fade-in-up">
-              {/* Continue Watching */}
-              <section>
-                <div className="flex items-center gap-3 mb-5">
-                  <span className="w-1 h-6 rounded-full brand-gradient block" />
-                  <h2 className="text-xl font-bold font-[Outfit] text-white">Continue Watching</h2>
-                </div>
-                {continueWatching.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {continueWatching.map((item, i) => (
-                      <Link key={item.id} href={`/watch/${item.animeId}?ep=${item.episodeNumber}`}
-                        className="flex items-center gap-4 glass border border-white/6 rounded-2xl p-4 hover:border-[#7c3aed]/40 hover:bg-[#7c3aed]/5 transition-all group">
-                        <div className="relative w-16 h-16 rounded-xl flex-shrink-0 flex items-center justify-center bg-[#12121f] overflow-hidden border border-white/10">
-                          {item.imageUrl ? (
-                            <Image
-                              src={item.imageUrl}
-                              alt={item.title}
-                              fill
-                              className="object-cover"
-                              unoptimized
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center" style={{ background: CARD_GRADIENTS[i % CARD_GRADIENTS.length] }}>
-                              <span className="text-2xl font-black text-white/30 font-[Outfit]">{item.title[0]}</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-white font-[Outfit] text-sm truncate group-hover:text-[#a855f7] transition-colors">{item.title}</p>
-                          <p className="text-xs text-[#9898b8]">Episode {item.episodeNumber}</p>
-                          <div className="mt-2 h-1 bg-white/10 rounded-full">
-                            <div className="h-full brand-gradient rounded-full" style={{ width: `${item.progress || 50}%` }} />
-                          </div>
-                        </div>
-                        <svg className="w-8 h-8 text-white fill-white opacity-0 group-hover:opacity-100 transition-all flex-shrink-0" viewBox="0 0 24 24">
-                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
-                        </svg>
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-6 rounded-2xl glass border border-white/5 text-center text-[#9898b8] text-sm max-w-md">
-                    No series in progress yet. Settle down with your favorite anime and begin watching!
-                  </div>
-                )}
-              </section>
+              <ContinueWatching />
 
               {/* Watchlist preview */}
               <section>
@@ -394,19 +444,19 @@ export default function ProfilePage() {
                     <span className="w-1 h-6 rounded-full brand-gradient block" />
                     <h2 className="text-xl font-bold font-[Outfit] text-white">My Watchlist</h2>
                   </div>
-                  {watchlist.length > 0 && (
+                  {malList.length > 0 && (
                     <button onClick={() => setActiveTab("Watchlist")} className="text-sm text-[#06b6d4] hover:text-[#22d3ee] transition-colors cursor-pointer">View all →</button>
                   )}
                 </div>
-                {watchlist.length > 0 ? (
+                {malList.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                    {watchlist.slice(0, 6).map((item, i) => (
-                      <AnimeCard key={item._id} anime={mapItemToAnimeData(item)} index={i} />
+                    {malList.slice(0, 6).map((entry, i) => (
+                      <AnimeCard key={entry.anime.malId} anime={entry.anime} index={i} />
                     ))}
                   </div>
                 ) : (
                   <div className="p-6 rounded-2xl glass border border-white/5 text-center text-[#9898b8] text-sm max-w-md">
-                    Your watchlist is empty. Add titles from home or browse pages!
+                    Your MAL list is empty. Add titles on MyAnimeList and they&apos;ll show up here.
                   </div>
                 )}
               </section>
@@ -414,24 +464,40 @@ export default function ProfilePage() {
           )}
 
           {activeTab === "Watchlist" && (
-            <div className="animate-fade-in-up">
-              <div className="flex items-center justify-between mb-6">
+            <div className="animate-fade-in-up space-y-12">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <span className="w-1 h-6 rounded-full brand-gradient block" />
                   <h2 className="text-xl font-bold font-[Outfit] text-white">My Watchlist</h2>
-                  <span className="text-sm text-[#5a5a78]">({watchlist.length})</span>
+                  <span className="text-sm text-[#5a5a78]">({malList.length})</span>
                 </div>
               </div>
-              {watchlist.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                  {watchlist.map((item, i) => (
-                    <AnimeCard key={item._id} anime={mapItemToAnimeData(item)} index={i} />
-                  ))}
-                </div>
-              ) : (
+
+              {malList.length === 0 ? (
                 <div className="text-center py-16 text-[#9898b8] text-sm glass border border-white/5 rounded-2xl">
                   No anime listed on your watchlist.
                 </div>
+              ) : (
+                [
+                  { key: "watching", title: "Currently Watching" },
+                  { key: "on_hold", title: "On Hold" },
+                  { key: "completed", title: "Completed" },
+                  { key: "plan_to_watch", title: "Plan to Watch" },
+                  { key: "dropped", title: "Dropped" },
+                ].map(({ key, title }) => {
+                  const items = malList.filter((entry) => entry.listStatus === key);
+                  if (items.length === 0) return null;
+                  return (
+                    <section key={key}>
+                      <h3 className="text-sm font-bold text-[#9898b8] uppercase tracking-widest mb-4">
+                        {title} <span className="text-[#5a5a78]">({items.length})</span>
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                        {items.map((entry, i) => renderMalCard(entry, i))}
+                      </div>
+                    </section>
+                  );
+                })
               )}
             </div>
           )}
@@ -549,68 +615,40 @@ export default function ProfilePage() {
                 </form>
               </div>
 
-              {/* Password change form (only for Credentials signups) */}
-              {profileData?.provider === "credentials" && (
-                <div className="pt-6 border-t border-white/5">
-                  <h3 className="font-bold text-white text-lg mb-4 font-[Outfit]">Change Password</h3>
-                  
-                  {passwordSuccess && (
-                    <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-xs mb-4 font-semibold">
-                      {passwordSuccess}
-                    </div>
-                  )}
-                  {passwordError && (
-                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs mb-4 font-semibold">
-                      {passwordError}
-                    </div>
-                  )}
+              {/* MyAnimeList connection — always connected, since MAL is the login method */}
+              <div className="pt-6 border-t border-white/5">
+                <h3 className="font-bold text-white text-lg mb-1 font-[Outfit]">MyAnimeList</h3>
+                <p className="text-xs text-[#9898b8] mb-4">
+                  You&apos;re signed in with MyAnimeList. Your list is available in the Watchlist tab.
+                </p>
 
-                  <form onSubmit={handlePasswordChange} className="space-y-4">
-                    <div className="glass border border-white/6 rounded-2xl p-5">
-                      <label className="block text-xs font-bold text-[#9898b8] uppercase tracking-widest mb-2">Current Password</label>
-                      <input
-                        type="password"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        placeholder="••••••••••"
-                        required
-                        className="w-full bg-transparent border-0 text-white text-sm outline-none"
-                      />
+                <div className="glass border border-white/6 rounded-2xl p-5 space-y-4">
+                  <div>
+                    <p className="text-sm text-white font-semibold">Connected as {profileData?.malUsername}</p>
+                  </div>
+                  <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                    <div>
+                      <p className="text-sm text-white font-semibold">Sync progress back to MAL</p>
+                      <p className="text-xs text-[#9898b8] max-w-sm">
+                        When on, finishing an episode in Anigma updates your MAL progress and status. Off by default.
+                      </p>
                     </div>
-                    <div className="glass border border-white/6 rounded-2xl p-5">
-                      <label className="block text-xs font-bold text-[#9898b8] uppercase tracking-widest mb-2">New Password</label>
-                      <input
-                        type="password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="Min 8 characters"
-                        required
-                        className="w-full bg-transparent border-0 text-white text-sm outline-none"
-                      />
-                    </div>
-                    <div className="glass border border-white/6 rounded-2xl p-5">
-                      <label className="block text-xs font-bold text-[#9898b8] uppercase tracking-widest mb-2">Confirm New Password</label>
-                      <input
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Confirm new password"
-                        required
-                        className="w-full bg-transparent border-0 text-white text-sm outline-none"
-                      />
-                    </div>
-
                     <button
-                      type="submit"
-                      disabled={changingPassword}
-                      className="w-full py-3 rounded-2xl brand-gradient text-white font-bold text-sm shadow-md hover:-translate-y-0.5 disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center gap-2"
+                      onClick={() => handleToggleMalSync(!profileData?.malSyncEnabled)}
+                      disabled={togglingSync}
+                      className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 cursor-pointer disabled:opacity-50 ${
+                        profileData?.malSyncEnabled ? "brand-gradient" : "bg-white/10"
+                      }`}
                     >
-                      {changingPassword && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                      Change Password
+                      <span
+                        className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform ${
+                          profileData?.malSyncEnabled ? "translate-x-5" : ""
+                        }`}
+                      />
                     </button>
-                  </form>
+                  </div>
                 </div>
-              )}
+              </div>
 
               <div className="pt-6 border-t border-white/5 space-y-4">
                 <div>
@@ -631,5 +669,13 @@ export default function ProfilePage() {
       </div>
       <Footer />
     </main>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#08080f]" />}>
+      <ProfileContent />
+    </Suspense>
   );
 }
