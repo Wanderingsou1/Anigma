@@ -1,30 +1,16 @@
 import NextAuth from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
-import DiscordProvider from "next-auth/providers/discord";
 import type { NextAuthOptions } from "next-auth";
 
+// No providers are registered here: MAL's OAuth2 only supports PKCE
+// "plain" code challenges, which next-auth v4's built-in provider/PKCE
+// handling can't express (it always generates S256). Login instead happens
+// entirely through the hand-rolled /api/auth/mal/login + /callback routes,
+// which mint a session by encoding a next-auth-compatible JWT directly and
+// setting the session cookie. This file stays around so getServerSession,
+// useSession, and signOut keep working against that cookie everywhere else
+// in the app.
 export const authOptions: NextAuthOptions = {
-  providers: [
-    // Google OAuth (only if credentials provided)
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-      ? [
-          GoogleProvider({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-          }),
-        ]
-      : []),
-
-    // Discord OAuth (only if credentials provided)
-    ...(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET
-      ? [
-          DiscordProvider({
-            clientId: process.env.DISCORD_CLIENT_ID,
-            clientSecret: process.env.DISCORD_CLIENT_SECRET,
-          }),
-        ]
-      : []),
-  ],
+  providers: [],
 
   session: {
     strategy: "jwt",
@@ -33,30 +19,18 @@ export const authOptions: NextAuthOptions = {
 
   pages: {
     signIn: "/login",
-    newUser: "/signup",
     error: "/login",
   },
 
   callbacks: {
-    async signIn() {
-      return true;
-    },
-
-    async jwt({ token, user, trigger, session }) {
-      if (user) {
-        token.userId = (user as { id?: string }).id ?? "";
-        token.username = user.name ?? "";
-        token.plan = "free";
-        token.avatar = user.image ?? "";
-        token.provider = user.email ? "oauth" : "unknown";
-      }
-
+    // Only reached via the client-side update() call (e.g. profile settings save) —
+    // initial sign-in never goes through here since there are no providers.
+    async jwt({ token, trigger, session }) {
       if (trigger === "update" && session) {
         if (session.username) token.username = session.username;
         if (session.plan) token.plan = session.plan;
         if (session.avatar) token.avatar = session.avatar;
       }
-
       return token;
     },
 

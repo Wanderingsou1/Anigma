@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { favoriteSchema } from "@/lib/validations/auth";
+import dbConnect from "@/lib/db/mongoose";
+import Favorite from "@/lib/db/models/Favorite";
 
 export async function GET() {
   try {
@@ -10,7 +12,12 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    return NextResponse.json({ data: [] });
+    await dbConnect();
+    const items = await Favorite.find({ userId: session.user.id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return NextResponse.json({ data: items });
   } catch (error) {
     console.error("Favorites GET error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -33,10 +40,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { error: "Favorites are disabled because the database layer was removed." },
-      { status: 501 }
+    await dbConnect();
+    const item = await Favorite.findOneAndUpdate(
+      { userId: session.user.id, animeId: parsed.data.animeId },
+      { $set: parsed.data },
+      { upsert: true, new: true }
     );
+
+    return NextResponse.json({ data: item }, { status: 200 });
   } catch (error) {
     console.error("Favorites POST error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -56,10 +67,10 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "animeId is required" }, { status: 400 });
     }
 
-    return NextResponse.json(
-      { error: "Favorites are disabled because the database layer was removed." },
-      { status: 501 }
-    );
+    await dbConnect();
+    await Favorite.deleteOne({ userId: session.user.id, animeId: Number(animeId) });
+
+    return NextResponse.json({ data: { deleted: true } });
   } catch (error) {
     console.error("Favorites DELETE error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
