@@ -1,0 +1,81 @@
+import Link from "next/link";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import AnimeCard from "@/components/AnimeCard";
+import { getNewReleases } from "@/lib/api/anilist";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "New Releases - Anigma",
+  description: "The newest anime releases, freshly premiered and airing now.",
+};
+
+export default async function NewReleasesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
+  const result = await getNewReleases(page, 24);
+
+  return (
+    <main className="min-h-screen bg-[#08080f]">
+      <Navbar />
+      <div className="pt-[70px]">
+        <div className="relative py-14 px-4 md:px-6 overflow-hidden border-b border-white/5">
+          <div className="absolute inset-0 animated-gradient opacity-10" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#08080f]" />
+          <div className="relative max-w-[1400px] mx-auto">
+            <h1 className="text-4xl md:text-5xl font-black font-[Outfit] text-white mb-3">
+              🆕 New <span className="gradient-text">Releases</span>
+            </h1>
+            <p className="text-[#9898b8]">The newest anime, freshly premiered and airing now.</p>
+          </div>
+        </div>
+
+        <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-10">
+          <div className="flex items-center gap-3 mb-8">
+            <span className="w-1 h-6 rounded-full brand-gradient block" />
+            <h2 className="text-xl font-bold font-[Outfit] text-white">Latest Premieres</h2>
+            <span className="text-sm text-[#5a5a78]">({result.pagination.totalItems})</span>
+          </div>
+
+          {result.data.length === 0 ? (
+            <div className="text-center py-24">
+              <div className="text-5xl mb-4">🔍</div>
+              <h3 className="text-xl font-bold font-[Outfit] text-white mb-2">No results found</h3>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {result.data.map((anime, i) => (
+                <AnimeCard key={anime.id} anime={anime} index={i} />
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-center gap-3 mt-12">
+            {page > 1 && (
+              <Link
+                href={`/new-releases?page=${page - 1}`}
+                className="px-6 py-2.5 rounded-full glass border border-white/10 text-sm text-white font-semibold hover:bg-white/10 transition-all"
+              >
+                ← Previous
+              </Link>
+            )}
+            <span className="px-4 text-sm text-[#9898b8]">Page {page}</span>
+            {result.pagination.hasNextPage && (
+              <Link
+                href={`/new-releases?page=${page + 1}`}
+                className="px-6 py-2.5 rounded-full brand-gradient text-sm text-white font-bold hover:-translate-y-0.5 transition-all"
+              >
+                Next →
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+      <Footer />
+    </main>
+  );
+}

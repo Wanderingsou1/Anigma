@@ -9,8 +9,8 @@ import Image from "next/image";
 const NAV_LINKS = [
   { label: "Home", href: "/home" },
   { label: "Browse", href: "/browse" },
-  { label: "New Releases", href: "/browse?filter=new" },
-  { label: "Popular", href: "/browse?filter=popular" },
+  { label: "New Releases", href: "/new-releases" },
+  { label: "Popular", href: "/popular" },
 ];
 
 export default function Navbar() {
