@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTrendingAnime } from "@/lib/api/anilist";
+import { getTrendingAnime, AniListUnavailableError } from "@/lib/api/anilist";
 
 export async function GET() {
   try {
@@ -10,6 +10,14 @@ export async function GET() {
     );
   } catch (error) {
     console.error("Trending API error:", error);
-    return NextResponse.json({ data: [] }, { status: 500 });
+    const unavailable = error instanceof AniListUnavailableError;
+    return NextResponse.json(
+      {
+        error: unavailable ? "anilist_unavailable" : "trending_failed",
+        message: unavailable ? error.message : "Failed to load trending anime",
+        data: [],
+      },
+      { status: unavailable ? 503 : 500 }
+    );
   }
 }

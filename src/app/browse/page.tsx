@@ -31,6 +31,7 @@ function BrowseContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [browseError, setBrowseError] = useState<string | null>(null);
 
   // Filter state
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
@@ -72,6 +73,7 @@ function BrowseContent() {
   // Fetch browse anime
   const fetchAnime = async (page: number, append = false) => {
     setIsLoading(true);
+    setBrowseError(null);
     try {
       const params = new URLSearchParams();
       
@@ -115,8 +117,8 @@ function BrowseContent() {
       params.set("limit", "20");
 
       const response = await fetch(`/api/anime/search?${params.toString()}`);
-      if (!response.ok) throw new Error("Search failed");
-      const resData: PaginatedResponse<AnimeData> = await response.json();
+      const resData: PaginatedResponse<AnimeData> & { message?: string } = await response.json();
+      if (!response.ok) throw new Error(resData?.message || "Search failed");
 
       let finalData = resData.data;
 
@@ -135,6 +137,8 @@ function BrowseContent() {
       setHasNextPage(resData.pagination.hasNextPage);
     } catch (err) {
       console.error(err);
+      if (!append) setAnimeList([]);
+      setBrowseError(err instanceof Error ? err.message : "Failed to load anime.");
     } finally {
       setIsLoading(false);
     }
@@ -366,9 +370,11 @@ function BrowseContent() {
                   <p className="text-sm text-[#9898b8]">
                     {isLoading && currentPage === 1 ? (
                       <span>Searching anime...</span>
+                    ) : browseError ? (
+                      <span className="text-[#f87171]">Results unavailable</span>
                     ) : (
-                      <span className="text-white font-bold">{animeList.length}</span>
-                    )} results found
+                      <><span className="text-white font-bold">{animeList.length}</span> results found</>
+                    )}
                   </p>
                   <div className="hidden lg:flex items-center gap-2">
                     <span className="text-xs text-[#5a5a78]">Sort:</span>
@@ -384,6 +390,16 @@ function BrowseContent() {
 
                 {isLoading && currentPage === 1 ? (
                   <GridSkeleton count={10} />
+                ) : browseError ? (
+                  <div className="text-center py-24">
+                    <div className="text-5xl mb-4">⚠️</div>
+                    <h3 className="text-xl font-bold font-[Outfit] text-white mb-2">Browse is temporarily unavailable</h3>
+                    <p className="text-[#9898b8] text-sm mb-6 max-w-md mx-auto">{browseError}</p>
+                    <button onClick={() => fetchAnime(1, false)}
+                      className="px-6 py-2.5 rounded-full brand-gradient text-white font-bold text-sm">
+                      Try Again
+                    </button>
+                  </div>
                 ) : animeList.length === 0 ? (
                   <div className="text-center py-24">
                     <div className="text-5xl mb-4">🔍</div>
