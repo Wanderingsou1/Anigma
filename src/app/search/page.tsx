@@ -19,6 +19,8 @@ function SearchContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [trending, setTrending] = useState<AnimeData[]>([]);
   const [isLoadingTrending, setIsLoadingTrending] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [trendingError, setTrendingError] = useState<string | null>(null);
 
   // Debouncing logic
   const [debouncedQuery, setDebouncedQuery] = useState(initialQ);
@@ -37,13 +39,15 @@ function SearchContent() {
   // Load trending if query is empty
   const fetchTrending = useCallback(async () => {
     setIsLoadingTrending(true);
+    setTrendingError(null);
     try {
       const response = await fetch("/api/anime/trending");
-      if (!response.ok) throw new Error("Failed to fetch trending");
       const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Failed to fetch trending");
       setTrending(data.data || []);
     } catch (err) {
       console.error(err);
+      setTrendingError(err instanceof Error ? err.message : "Failed to load trending anime.");
     } finally {
       setIsLoadingTrending(false);
     }
@@ -52,22 +56,25 @@ function SearchContent() {
   // Fetch search results
   const fetchResults = useCallback(async (q: string, genre: string) => {
     setIsLoading(true);
+    setSearchError(null);
     try {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
-      
+
       if (genre !== "All") {
         params.set("genres", genre);
       }
-      
+
       params.set("limit", "24");
 
       const response = await fetch(`/api/anime/search?${params.toString()}`);
-      if (!response.ok) throw new Error("Search request failed");
-      const data: PaginatedResponse<AnimeData> = await response.json();
+      const data: PaginatedResponse<AnimeData> & { message?: string } = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Search request failed");
       setResults(data.data || []);
     } catch (err) {
       console.error(err);
+      setResults([]);
+      setSearchError(err instanceof Error ? err.message : "Search request failed.");
     } finally {
       setIsLoading(false);
     }
@@ -140,15 +147,27 @@ function SearchContent() {
               <p className="text-sm text-[#9898b8] mb-6">
                 {isLoading ? (
                   <span>Searching...</span>
+                ) : searchError ? (
+                  <span className="text-[#f87171]">Search unavailable</span>
                 ) : results.length > 0 ? (
                   <><span className="text-white font-bold">{results.length}</span> results {query ? `for "${query}"` : ""}</>
                 ) : (
                   "No results found"
                 )}
               </p>
-              
+
               {isLoading ? (
                 <GridSkeleton count={12} />
+              ) : searchError ? (
+                <div className="text-center py-24 animate-fade-in-up">
+                  <div className="text-6xl mb-4">⚠️</div>
+                  <h3 className="text-xl font-bold font-[Outfit] text-white mb-2">Search is temporarily unavailable</h3>
+                  <p className="text-[#9898b8] text-sm mb-6 max-w-md mx-auto">{searchError}</p>
+                  <button onClick={() => fetchResults(debouncedQuery, activeGenre)}
+                    className="px-6 py-2.5 rounded-full brand-gradient text-white font-bold text-sm">
+                    Try Again
+                  </button>
+                </div>
               ) : results.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                   {results.map((anime, i) => <AnimeCard key={anime.id || anime.malId} anime={anime} index={i} />)}
@@ -191,6 +210,16 @@ function SearchContent() {
               
               {isLoadingTrending ? (
                 <GridSkeleton count={12} />
+              ) : trendingError ? (
+                <div className="text-center py-24 animate-fade-in-up">
+                  <div className="text-6xl mb-4">⚠️</div>
+                  <h3 className="text-xl font-bold font-[Outfit] text-white mb-2">Couldn&apos;t load anime</h3>
+                  <p className="text-[#9898b8] text-sm mb-6 max-w-md mx-auto">{trendingError}</p>
+                  <button onClick={fetchTrending}
+                    className="px-6 py-2.5 rounded-full brand-gradient text-white font-bold text-sm">
+                    Try Again
+                  </button>
+                </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                   {trending.map((anime, i) => <AnimeCard key={anime.malId} anime={anime} index={i} />)}

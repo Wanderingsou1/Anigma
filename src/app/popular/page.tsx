@@ -2,7 +2,8 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AnimeCard from "@/components/AnimeCard";
-import { getPopularAnime } from "@/lib/api/anilist";
+import { getPopularAnime, AniListUnavailableError } from "@/lib/api/anilist";
+import type { PaginatedResponse, AnimeData } from "@/lib/api/types";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -17,7 +18,19 @@ export default async function PopularPage({
 }) {
   const { page: pageParam } = await searchParams;
   const page = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
-  const result = await getPopularAnime(page, 24);
+
+  let result: PaginatedResponse<AnimeData>;
+  let loadError: string | null = null;
+  try {
+    result = await getPopularAnime(page, 24);
+  } catch (error) {
+    console.error("Popular page error:", error);
+    loadError =
+      error instanceof AniListUnavailableError
+        ? error.message
+        : "Failed to load popular anime.";
+    result = { data: [], pagination: { lastVisiblePage: page, hasNextPage: false, currentPage: page, totalItems: 0 } };
+  }
 
   return (
     <main className="min-h-screen bg-[#08080f]">
@@ -41,7 +54,13 @@ export default async function PopularPage({
             <span className="text-sm text-[#5a5a78]">({result.pagination.totalItems})</span>
           </div>
 
-          {result.data.length === 0 ? (
+          {loadError ? (
+            <div className="text-center py-24">
+              <div className="text-5xl mb-4">⚠️</div>
+              <h3 className="text-xl font-bold font-[Outfit] text-white mb-2">Popular anime is temporarily unavailable</h3>
+              <p className="text-[#9898b8] text-sm max-w-md mx-auto">{loadError}</p>
+            </div>
+          ) : result.data.length === 0 ? (
             <div className="text-center py-24">
               <div className="text-5xl mb-4">🔍</div>
               <h3 className="text-xl font-bold font-[Outfit] text-white mb-2">No results found</h3>

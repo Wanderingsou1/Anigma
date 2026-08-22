@@ -2,7 +2,8 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AnimeCard from "@/components/AnimeCard";
 import { GENRES } from "@/lib/data";
-import { searchAniList, ANILIST_TAG_ONLY_GENRES } from "@/lib/api/anilist";
+import { searchAniList, ANILIST_TAG_ONLY_GENRES, AniListUnavailableError } from "@/lib/api/anilist";
+import type { PaginatedResponse, AnimeData } from "@/lib/api/types";
 import type { Metadata } from "next";
 
 const GENRE_META: Record<string, { icon: string; color: string; desc: string }> = {
@@ -38,12 +39,25 @@ export default async function GenrePage({ params }: { params: Promise<{ slug: st
   const matchedGenre = GENRES.find((g) => g.toLowerCase().replace(/\s+/g, "-") === slug.toLowerCase());
   const anilistLabel = matchedGenre ?? genreName;
   const isTag = ANILIST_TAG_ONLY_GENRES.has(slug.toLowerCase());
-  const result = await searchAniList(
-    "",
-    1,
-    24,
-    isTag ? { tag: anilistLabel, sort: "POPULARITY_DESC" } : { genre: anilistLabel, sort: "POPULARITY_DESC" }
-  );
+
+  let result: PaginatedResponse<AnimeData>;
+  let loadError: string | null = null;
+  try {
+    result = await searchAniList(
+      "",
+      1,
+      24,
+      isTag ? { tag: anilistLabel, sort: "POPULARITY_DESC" } : { genre: anilistLabel, sort: "POPULARITY_DESC" }
+    );
+  } catch (error) {
+    console.error("Genre page error:", error);
+    loadError =
+      error instanceof AniListUnavailableError
+        ? error.message
+        : `Failed to load ${genreName} anime.`;
+    result = { data: [], pagination: { lastVisiblePage: 1, hasNextPage: false, currentPage: 1, totalItems: 0 } };
+  }
+
   const otherGenres = GENRES.filter((g) => g.toLowerCase() !== genreName.toLowerCase()).slice(0, 12);
 
   return (
@@ -88,11 +102,19 @@ export default async function GenrePage({ params }: { params: Promise<{ slug: st
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 mb-16">
-            {result.data.map((anime, i) => (
-              <AnimeCard key={anime.id} anime={anime} index={i} />
-            ))}
-          </div>
+          {loadError ? (
+            <div className="text-center py-24">
+              <div className="text-5xl mb-4">⚠️</div>
+              <h3 className="text-xl font-bold font-[Outfit] text-white mb-2">This genre is temporarily unavailable</h3>
+              <p className="text-[#9898b8] text-sm max-w-md mx-auto">{loadError}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 mb-16">
+              {result.data.map((anime, i) => (
+                <AnimeCard key={anime.id} anime={anime} index={i} />
+              ))}
+            </div>
+          )}
 
           <div className="border-t border-white/5 pt-10">
             <div className="flex items-center gap-3 mb-6">
