@@ -2,6 +2,14 @@ import type { AnimeData, PaginatedResponse } from "./types";
 
 const ANILIST_URL = "https://graphql.anilist.co";
 
+/** Thrown when AniList itself is down/blocking requests (403/502/503/504), as opposed to a query bug. */
+export class AniListUnavailableError extends Error {
+  constructor(message = "The AniList API is temporarily unavailable. Please try again shortly.") {
+    super(message);
+    this.name = "AniListUnavailableError";
+  }
+}
+
 const MEDIA_FIELDS = `
   id idMal
   title { romaji english native }
@@ -25,6 +33,9 @@ async function query<T>(gql: string, variables: Record<string, unknown> = {}): P
     body: JSON.stringify({ query: gql, variables }),
     next: { revalidate: 600 },
   });
+  if (res.status === 403 || res.status === 502 || res.status === 503 || res.status === 504) {
+    throw new AniListUnavailableError();
+  }
   if (!res.ok) throw new Error(`AniList query failed: ${res.status}`);
   const json = await res.json();
   if (json.errors) throw new Error(json.errors[0]?.message ?? "AniList error");
