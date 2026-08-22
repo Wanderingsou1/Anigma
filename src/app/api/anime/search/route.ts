@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchAniList, ANILIST_TAG_ONLY_GENRES, type AniListSort, type SearchAniListOptions } from "@/lib/api/anilist";
+import { searchAniList, ANILIST_TAG_ONLY_GENRES, AniListUnavailableError, type AniListSort, type SearchAniListOptions } from "@/lib/api/anilist";
 
 const STATUS_MAP: Record<string, SearchAniListOptions["status"]> = {
   airing: "RELEASING",
@@ -60,9 +60,15 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Search API error:", error);
+    const unavailable = error instanceof AniListUnavailableError;
     return NextResponse.json(
-      { error: "Failed to search anime", data: [], pagination: { lastVisiblePage: 1, hasNextPage: false, currentPage: 1, totalItems: 0 } },
-      { status: 500 }
+      {
+        error: unavailable ? "anilist_unavailable" : "search_failed",
+        message: unavailable ? error.message : "Failed to search anime",
+        data: [],
+        pagination: { lastVisiblePage: 1, hasNextPage: false, currentPage: 1, totalItems: 0 },
+      },
+      { status: unavailable ? 503 : 500 }
     );
   }
 }
